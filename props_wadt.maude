@@ -12,13 +12,11 @@ mod DS-TEST is
  op btl : -> BatchTransList .
  eq btl = map(FV('Mul2)) . map(FV('Add1)) .
 
- op db : -> DB .
-
  op world : -> World .
- eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, db, btl .
+ eq world = (batch3 & batch2 & batch1) [in: mtBatch, out: mtBatch] myFuns, mtDB, btl .
 
  op timedWorld : -> World .
- eq timedWorld = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, db, btl .
+ eq timedWorld = (batch3 & batch2 & batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, mtDB, btl .
 endm
 
 mod WADT-DS-TEST is
@@ -29,23 +27,21 @@ mod WADT-DS-TEST is
  eq batch2 = s(z) s^6(z) s(z) s^5(z) z s^5(z) s^8(z) .
  eq batch3 = z z z s^3(z) .
 
- op db : -> DB .
-
  op myFuns : -> Dec .
  eq myFuns =
-    FV('greaterThan4)(V('x)) <= V('x) - s^4(z) &
+    FV('moreThan4)(V('x)) <= V('x) - s^4(z) &
     FV('moreThan3)(V('x)) <= If Equal(V('x), z) Or (Equal(V('x), s(z)) Or Equal(V('x), s^2(z)))
                              Then z
                              Else s(z) .
 
  op btl : -> BatchTransList .
- eq btl = map(FV('moreThan3)) . count . filter(FV('greaterThan4)) .
+ eq btl = map(FV('moreThan3)) . count . filter(FV('moreThan4)) .
 
  op world : -> World .
- eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, db, btl .
+ eq world = (batch3 & batch2 & batch1) [in: mtBatch, out: mtBatch] myFuns, mtDB, btl .
 
  op timedWorld : -> World .
- eq timedWorld = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, db, btl .
+ eq timedWorld = (batch3 & batch2 & batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, mtDB, btl .
 endm
 
 rew timedWorld .
