@@ -1,6 +1,18 @@
 load model-checker.maude
 load ds.maude
 
+fmod TEST-BATCH is
+ pr BATCH-SEMANTICS .
+
+ op batch1 : -> Batch .
+ eq batch1 = s(z) z s(s(z)) s(s(s(s(z)))) .
+
+ op myFuns : -> Dec .
+ eq myFuns =
+    FV('Add1)(V('x)) <= V('x) + s(z) &
+    FV('Mul2)(V('x)) <= V('x) * s(s(z))  .
+endfm
+
 mod DS-TEST is
  pr TEST-BATCH .
  pr DS-SEMANTICS .
@@ -46,12 +58,6 @@ endm
 
 rew timedWorld .
 
-red myFuns, btl |- batch1 .
-
-red batch1 .
-
-red myFuns, map(FV('Mul2)) . map(FV('Add1)) |- batch1 .
-
 mod PROPS is
  pr DS-SEMANTICS .
  pr SATISFACTION .
@@ -65,27 +71,28 @@ mod PROPS is
  vars N N' : Num .
  var  W : World .
  vars Nt Nt' : Nat .
+ var  db : DB .
 
  op earthquake : -> Prop [ctor] .
- eq DS [in: IB, out: OB, time: Nt] D, BTL |= earthquake = numGreaterThan(IB, 5) >= 3 .
+ eq DS [in: IB, out: OB, time: Nt] D, db, BTL |= earthquake = numGreaterThan(IB, 5) >= 3 .
  eq W |= earthquake = false [owise] .
 
  *** Output is 1
  op detected : -> Prop [ctor] .
- eq DS [in: IB, out: s(z), time: Nt] D, BTL |= detected = true .
+ eq DS [in: IB, out: s(z), time: Nt] D, db, BTL |= detected = true .
  eq W |= detected = false [owise] .
 
  op initialBatch4Window : Nat -> Prop [ctor] .
- eq DS [in: IB, out: OB, time: Nt] D, BTL |= initialBatch4Window(Nt') = (Nt rem Nt') == 0 .
+ eq DS [in: IB, out: OB, time: Nt] D, db, BTL |= initialBatch4Window(Nt') = (Nt rem Nt') == 0 .
 
  op numGreaterThan : Batch Nat -> Nat .
  eq numGreaterThan(mtBatch, Nt) = 0 .
  eq numGreaterThan(N B, Nt) = if greater(N, Nt)
                               then 1
                               else 0
-                              fi + numGreaterThan(B) .
+                              fi + numGreaterThan(B, Nt) .
 
- op greaterThan : Num Nat -> Bool .
+ op greater : Num Nat -> Bool .
  eq greater(s(N), 0) = true .
  eq greater(s(N), s(Nt)) = greater(N, Nt) .
  eq greater(N, Nt) = false [owise] .
