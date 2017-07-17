@@ -28,7 +28,7 @@ mod PROPS is
  eq DS [in: IB, out: OB] D, BTL |= sameLength = length(IB) == length(OB) .
  eq W |= sameLength = false .
 
- *** Hay un 1 en la salida
+ *** Output contains 1
  op enabled : -> Prop [ctor] .
  eq DS [in: IB, out: OB] D, BTL |= enabled = contains(OB, s(z)) .
  eq W |= enabled = false .

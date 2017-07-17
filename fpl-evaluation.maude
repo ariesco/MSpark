@@ -368,7 +368,7 @@ fmod EVALUATION is
    if v := singleValue(fst(eval(db, SELECT R FROM Q))) .
   ceq [select-where] : D,ro,db |- (SELECT R FROM Q WHERE C) = [v, db]
    if v := singleValue(fst(eval(db, SELECT R FROM Q WHERE C))) .
-  ceq [select-where] : D,ro,db |- (UPDATE Q SET C WHERE Q' =sql= sv) = [z, db'']
+  ceq [update] : D,ro,db |- (UPDATE Q SET C WHERE Q' =sql= sv) = [z, db'']
    if [v, db'] := D,ro,db |- sv /\
       db'' := snd(eval(db', UPDATE Q SET C WHERE Q' =sql= v)) .
 

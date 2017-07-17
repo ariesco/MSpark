@@ -46,20 +46,9 @@ mod TEST is
  eq btl = map(FV('Ban)) .
 
  op world : -> World .
- eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, init, btl .
+ eq world = (batch3 & batch2 & batch1) [in: mtBatch, out: mtBatch] myFuns, init, btl .
 endm
 
-*** red myFuns,mt[(z, z) // (V('x), V('y))],init |- (If Equal(V('y), s(z))
-***                           Then (UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= V('x))
-***                           Else s(z)) .
-
-*** red banned?(['users : 'id . 'Name . 'Suscription . 'Banned | z . 'Mr_a . s^6(z) . z ; s(z) . 'Mr_b . s^4(z) . s(z) ;
-***     s^2(z) . 'Mr_c . s(z) . z], s(z)) .
-
-red mtDS[in: << z,z >> << s(z),z >> << s^2(z),z >>,out: s(z) s(z) s(z)]FV('Ban)(V('x),V('y))<= If Equal(V('y), s(z)) Then
-    UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= s(z) Else s(z),['users : 'id . 'Name . 'Suscription . 'Banned | z . 'Mr_a . s^6(z) . z ; s(z) . 'Mr_b . s^4(z) . s(z) ;
-    s^2(z) . 'Mr_c . s(z) . z],map(FV('Ban)) |= banned(s(z)) .
-
-red world |= banned(s(z)) .
+eof
 
 red modelCheck(world, <> [] banned(s(z))) .

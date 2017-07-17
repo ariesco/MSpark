@@ -93,7 +93,7 @@ fmod DS is
  subsort Batch < DStream .
 
  op mtDS : -> DStream [ctor] .
- op _|_ : DStream DStream -> DStream [ctor assoc id: mtDS] .
+ op _&_ : DStream DStream -> DStream [ctor assoc id: mtDS] .
 
  sort World .
 
@@ -114,12 +114,12 @@ mod DS-SEMANTICS is
  var  N : Nat .
 
  crl [process-batch] :
-     DS | B [in: IB, out: OB] D, db, BTL
+     DS & B [in: IB, out: OB] D, db, BTL
   => DS [in: B, out: B'] D, db', BTL
   if | B', db' | := D, db, BTL |- B .
 
  crl [process-batch-timed] :
-     DS | B [in: IB, out: OB, time: N] D, db, BTL
+     DS & B [in: IB, out: OB, time: N] D, db, BTL
   => DS [in: B, out: B', time: s(N)] D, db', BTL
   if | B', db' | := D, db, BTL |- B .
 endm
