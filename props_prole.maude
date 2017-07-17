@@ -1,0 +1,65 @@
+load model-checker.maude
+load ds.maude
+
+mod PROPS is
+ pr DS-SEMANTICS .
+ pr SATISFACTION .
+
+ subsort World < State .
+
+ var  BTL : BatchTransList .
+ vars IB OB : Batch .
+ vars RS RS' : Rows .
+ var  DS : DStream .
+ vars H R : Row .
+ var  W : World .
+ var  Q : Qid .
+ var  D : Dec .
+ var  N : Num .
+ var  db : DB .
+
+ op banned : Num -> Prop [ctor] .
+ eq DS [in: IB, out: OB] D, db, BTL |= banned(N) = banned?(db, N) .
+
+ op banned? : DB Num -> Bool .
+ eq banned?([Q : H | RS ; N . R . s(z) ; RS'] db, N) = true .
+ eq banned?(db, N) = false [owise] .
+endm
+
+mod TEST is
+ pr LTL-SIMPLIFIER .
+ pr MODEL-CHECKER .
+ pr SQL-TEST .
+ pr PROPS .
+
+ ops batch1 batch2 batch3 : -> Batch .
+ eq batch1 = << z, z >> << s(z), z >> << s^2(z), z >> .
+ eq batch2 = << z, z >> << s(z), s(z) >> << s^2(z), z >> .
+ eq batch3 = << z, z >> << s(z), z >> << s^2(z), z >> .
+
+ op myFuns : -> Dec .
+ eq myFuns =
+    FV('Ban)(V('x), V('y)) <= If Equal(V('y), s(z))
+                           Then (UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= V('x))
+                           Else z .
+ op btl : -> BatchTransList .
+ eq btl = map(FV('Ban)) .
+
+ op world : -> World .
+ eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, init, btl .
+endm
+
+*** red myFuns,mt[(z, z) // (V('x), V('y))],init |- (If Equal(V('y), s(z))
+***                           Then (UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= V('x))
+***                           Else s(z)) .
+
+*** red banned?(['users : 'id . 'Name . 'Suscription . 'Banned | z . 'Mr_a . s^6(z) . z ; s(z) . 'Mr_b . s^4(z) . s(z) ;
+***     s^2(z) . 'Mr_c . s(z) . z], s(z)) .
+
+red mtDS[in: << z,z >> << s(z),z >> << s^2(z),z >>,out: s(z) s(z) s(z)]FV('Ban)(V('x),V('y))<= If Equal(V('y), s(z)) Then
+    UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= s(z) Else s(z),['users : 'id . 'Name . 'Suscription . 'Banned | z . 'Mr_a . s^6(z) . z ; s(z) . 'Mr_b . s^4(z) . s(z) ;
+    s^2(z) . 'Mr_c . s(z) . z],map(FV('Ban)) |= banned(s(z)) .
+
+red world |= banned(s(z)) .
+
+red modelCheck(world, <> [] banned(s(z))) .

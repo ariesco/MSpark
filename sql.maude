@@ -1,0 +1,232 @@
+load aux-modules.maude
+
+fmod TABLE is
+ pr EXT-BOOL .
+ pr ELEM .
+ pr QID .
+ pr VAR .
+
+ sorts DB NamedTable SQLValue Table? Table Row Rows .
+ subsort Qid Num < SQLValue < Row < Rows .
+ subsort Table < Table? DB .
+ subsort Var < SQLValue .
+
+ op nothing : -> Row [ctor] .
+ op _._ : Row Row -> Row [ctor assoc id: nothing prec 30 ] .
+
+ op mtRS : -> Rows [ctor] .
+ op _;_ : Rows Rows -> Rows [ctor comm assoc id: mtRS prec 35] .
+
+ op mtTable : -> Table [ctor] .
+ op [_:_|_] : Qid Row Rows -> Table? .
+
+ op mtDB : -> DB [ctor] .
+ op __ : DB DB -> DB [ctor assoc comm id: mtDB] .
+
+ var  T? : Table? .
+ var  T : Table .
+ var  V : SQLValue .
+ var  RS : Rows .
+ vars H R : Row .
+ var  NM : Num .
+ var  db : DB .
+ var  N : Nat .
+ var  Q : Qid .
+
+ cmb [Q : H | RS] : Table
+  if allSameSize(H ; RS) /\
+     allQid(H) .
+
+ op allSameSize : Rows -> Bool .
+ eq allSameSize(mtRS) = true .
+ eq allSameSize(R ; RS) = $allSameSize(RS, || R ||) .
+
+ op $allSameSize : Rows Nat -> Bool .
+ eq $allSameSize(mtRS, N) = true .
+ eq $allSameSize(R ; RS, N) = || R || == N and-then $allSameSize(RS, N) .
+
+ op allQid : Row -> Bool .
+ eq allQid(nothing) = true .
+ eq allQid(Q . R) = true .
+ eq allQid(R) = false [owise] .
+
+ op ||_|| : Row -> Nat .
+ eq || V || = 1 .
+ eq || V . R || = s(|| R ||) .
+
+ op _[_] : DB Qid ~> Table .
+ eq ([Q : H | RS] db)[Q] = [Q : H | RS] .
+
+ op singleValue : Table ~> SQLValue .
+ eq singleValue([Q : H | V]) = V .
+endfm
+
+fmod SQL-SYNTAX is
+ pr TABLE .
+
+ sorts SQLCom SQLCond .
+
+ op SELECT_FROM_ : Row Qid -> SQLCom [ctor] .
+ op SELECT_FROM_WHERE_ : Row Qid SQLCond -> SQLCom [ctor] .
+ op UPDATE_SET_WHERE_ : Qid SQLCond SQLCond -> SQLCom [ctor] .
+
+ op _=sql=_ : Qid SQLValue -> SQLCond [ctor] .
+endfm
+
+fmod SQL-SEMANTICS is
+ pr SQL-SYNTAX .
+ pr NAT-LIST .
+
+ sort SQLResult .
+
+ op <_,_> : Table DB -> SQLResult [ctor] .
+
+ op fst : SQLResult -> Table .
+ eq fst(< T, db >) = T .
+
+ op snd : SQLResult -> DB .
+ eq snd(< T, db >) = db .
+
+ vars NL NL' : NatList .
+ vars T T' T'' : Table .
+ vars V V' : SQLValue .
+ vars H H' R R' : Row .
+ vars C ASG : SQLCond .
+ vars Q Q' Q'' : Qid .
+ vars RS RS' : Rows .
+ vars db db' : DB .
+ vars N N' : Nat .
+ var  NM : Num .
+
+ op eval : DB SQLCom -> SQLResult .
+ ceq eval(db, SELECT R FROM Q) = < T', db >
+  if T := db[Q] /\
+     NL := getNL(R, T) /\
+     T' := get(T, NL) .
+
+ ceq eval(db, SELECT R FROM Q WHERE C) = < T'', db >
+  if T := db[Q] /\
+     NL := getNL(R, T) /\
+     T' := get(T, NL) /\
+     NL' := getRows(T, C) /\
+     T'' := filterRows(T', NL') .
+
+ ceq eval(db, UPDATE Q SET ASG WHERE C) = < mtTable, T db' >
+  if [Q : H | RS] db' := db /\
+     Q' =sql= V := ASG /\
+     NL := getRows([Q : H | RS], C) /\
+     NL' := getNL(Q', [Q : H | RS]) /\
+     T := setTable([Q : H | RS], NL, NL', V) .
+
+ ***           Table Rows    Cols    Val
+ op setTable : Table NatList NatList SQLValue -> Table .
+ ceq setTable([Q : H | RS], NL, NL', V) = [Q : H | RS']
+  if RS' := setRows(RS, NL, NL', V, 0) .
+
+ op setRows : Rows NatList NatList SQLValue Nat -> Rows .
+ eq setRows(R ; RS, N NL, NL', V, N') = if N == N'
+                                        then setRow(R, NL', V, 0) ;
+                                             setRows(RS, NL, NL', V, s(N'))
+                                        else R ;
+                                             setRows(RS, N NL, NL', V, s(N'))
+                                        fi .
+ eq setRows(RS, NL, NL', V, N') = RS [owise] .
+
+ op setRow : Row NatList SQLValue Nat -> Row .
+ eq setRow(V . R, N NL, V', N') = if N == N'
+                                  then V' . setRow(R, NL, V', s(N'))
+                                  else V . setRow(R, N NL, V', s(N'))
+                                  fi .
+ eq setRow(R, NL, V, N) = R [owise] .
+
+ op getNL : Row Table -> NatList .
+ eq getNL(R, [Q : H | RS]) = $getNL(R, H) .
+ eq getNL(R, T) = nil [owise] .
+
+ op $getNL : Row Row -> NatList .
+ eq $getNL(Q . R, R') = $getNLAux(Q, R', 0) $getNL(R, R') .
+ eq $getNL(R, R') = nil [owise] .
+
+ op $getNLAux : SQLValue Row Nat -> NatList .
+ eq $getNLAux(V, V . R, N) = N .
+ ceq $getNLAux(V, V' . R, N) = $getNLAux(V, R, s(N))
+  if V =/= V' .
+ eq $getNLAux(V, R, N) = nil [owise] .
+
+ op get : Table NatList -> Table .
+ eq get(mtTable, NL) = mtTable .
+ ceq get([Q : H | RS], NL) = [Q : H' | RS']
+  if H' := get(H, NL) /\
+     RS' := get*(RS, NL) .
+
+ op get* : Rows NatList -> Rows .
+ eq get*(mtRS, NL) = mtRS .
+ eq get*(R ; RS, NL) = get(R, NL) ; get*(RS, NL) .
+
+ op get : Row NatList -> Row .
+ eq get(R, nil) = nothing .
+ eq get(R, N NL) = $get(R, N) . get(R, NL) .
+
+ op $get : Row Nat -> Row .
+ eq $get(V . R, 0) = V .
+ eq $get(V . R, s(N)) = $get(R, N) .
+ eq $get(R, N) = nothing [owise] .
+
+ op getRows : Table SQLCond -> NatList .
+ eq getRows(mtTable, C) = nil .
+ ceq getRows(T, Q' =sql= V) = getRows(T', V)
+  if [Q : H | RS] := T /\
+     NL := getNL(Q', T) /\
+     T' := get(T, NL) .
+
+ *** It is assumed to work with a table with a single column
+ op getRows : Table SQLValue ~> NatList .
+ eq getRows([Q : H | RS], V) = getRows(RS, V, 0) .
+
+ *** It is assumed to work with a table with a single column
+ op getRows : Rows SQLValue Nat ~> NatList .
+ eq getRows(mtRS, V, N) = nil .
+ eq getRows(V ; RS, V', N) = if V == V'
+                             then N
+                             else nil
+                             fi getRows(RS, V', s(N)) .
+
+ op filterRows : Table NatList -> Table .
+ ceq filterRows([Q : H | RS], NL) = [Q : H | RS']
+  if RS' := filterRows(RS, NL) .
+
+ op filterRows : Rows NatList -> Rows .
+ eq filterRows(RS, nil) = mtRS .
+ eq filterRows(RS, N NL) = takeRow(RS, N) ; filterRows(RS, NL) .
+
+ op takeRow : Rows Nat -> Rows .
+ eq takeRow(R ; RS, 0) = R .
+ eq takeRow(R ; RS, s(N)) = takeRow(RS, N) .
+ eq takeRow(RS, N) = mtRS [owise] .
+endfm
+
+fmod SQL-TEST is
+ pr SQL-SEMANTICS .
+
+ op rows : -> Rows .
+ op head : -> Row .
+ eq head =  'id        .   'Name   .    'Suscription         .   'Banned     .
+ eq rows =  z          .   'Mr_a   .    s^6(z)               .    z          ;
+            s(z)       .   'Mr_b   .    s^4(z)               .    z          ;
+            s^2(z)     .   'Mr_c   .    s(z)                 .    z          .
+
+ op init : -> DB .
+ eq init = ['users : head | rows] .
+
+ ops com com2 : -> SQLCom .
+ eq com = SELECT 'id . 'Num_invalid FROM 'users WHERE 'Name =sql= 'Mr_a .
+ eq com2 = UPDATE 'users SET 'Banned =sql= s(z) WHERE 'id =sql= z .
+endfm
+
+red eval(['users : 'id . 'Name . 'Suscription . 'Banned | z . 'Mr_a . s^6(z) . z ; s(z) . 'Mr_b . s^4(z) . z ; s^2(z) . 'Mr_c . s(z) . z], UPDATE 'users
+    SET 'Banned =sql= s(z) WHERE 'id =sql= s(z)) .
+
+red getRows(init, 'Name =sql= 'Mr_b) .
+
+red fst(eval(init, com)) .
+red snd(eval(init, com2)) .

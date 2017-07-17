@@ -1,0 +1,64 @@
+load model-checker.maude
+load ds.maude
+
+mod PROPS is
+ pr DS-SEMANTICS .
+ pr SATISFACTION .
+
+ subsort World < State .
+
+ var  DS : DStream .
+ vars IB OB B B' : Batch .
+ var  BTL : BatchTransList .
+ var  D : Dec .
+ vars N N' : Num .
+ var  W : World .
+ vars Nt Nt' : Nat .
+
+ op length : Batch -> Nat .
+ eq length(mtBatch) = 0 .
+ eq length(N B) = s(length(B)) .
+
+ op contains : Batch Num -> Bool .
+ eq contains(mtBatch, N) = false .
+ eq contains(N B, N) = true .
+ eq contains(N B, N') = contains(B, N') [owise] .
+
+ op sameLength : -> Prop [ctor] .
+ eq DS [in: IB, out: OB] D, BTL |= sameLength = length(IB) == length(OB) .
+ eq W |= sameLength = false .
+
+ *** Hay un 1 en la salida
+ op enabled : -> Prop [ctor] .
+ eq DS [in: IB, out: OB] D, BTL |= enabled = contains(OB, s(z)) .
+ eq W |= enabled = false .
+
+ op initialBatch4Window : Nat -> Prop [ctor] .
+ eq DS [in: IB, out: OB, time: Nt] D, BTL |= initialBatch4Window(Nt') = (Nt rem Nt') == 0 .
+endm
+
+mod TEST is
+ pr PROPS .
+ pr MODEL-CHECKER .
+ pr LTL-SIMPLIFIER .
+ pr DS-TEST .
+
+ var N : Nat .
+
+ op windowEnabled : NzNat -> Formula .
+ eq windowEnabled(s(N)) = windowEnabledAux(N) .
+
+ op windowEnabledAux : Nat -> Formula .
+ eq windowEnabledAux(0) = enabled .
+ eq windowEnabledAux(s(N)) = putNext(s(N)) \/ windowEnabledAux(N) .
+
+ op putNext : Nat -> Formula .
+ eq putNext(0) = enabled .
+ eq putNext(s(N)) = O putNext(N) .
+endm
+
+red modelCheck(world, [] sameLength) .
+
+red modelCheck(world, <> enabled) .
+
+red modelCheck(timedWorld, [] (initialBatch4Window(2) -> windowEnabled(2))) .

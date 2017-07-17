@@ -1,0 +1,14 @@
+fmod ELEM is
+
+  sorts Num Pair Elem .
+  subsort Num Pair < Elem .
+
+  op z : -> Num [ctor] .
+  op s : Num -> Num [ctor iter] .
+
+  op <<_,_>> : Num Num -> Pair [ctor] .
+endfm
+
+fmod VAR is
+  sort Var .
+endfm

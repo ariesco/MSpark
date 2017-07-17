@@ -1,0 +1,126 @@
+load fpl-evaluation.maude
+
+fmod BATCH is
+ pr SYNTAX .
+
+ sorts Batch .
+ subsort Num Pair < Elem < Batch .
+
+ op mtBatch : -> Batch [ctor] .
+ op __ : Batch Batch -> Batch [ctor assoc id: mtBatch] .
+
+ sorts BatchTrans BatchTransList .
+ subsort BatchTrans < BatchTransList .
+
+ op map : FunVar -> BatchTrans [ctor] .
+ op filter : FunVar -> BatchTrans [ctor] .
+ op count : -> BatchTrans [ctor] .
+
+ op _._ : BatchTransList BatchTransList -> BatchTransList [ctor assoc] .
+
+ var N : Num .
+ var B : Batch .
+
+ op |_| : Batch -> Nat .
+ eq | mtBatch | = 0 .
+ eq | N B | = s(| B |) .
+endfm
+
+fmod BATCH-SEMANTICS is
+ pr BATCH .
+ pr EVALUATION .
+
+ var  BTL : BatchTransList .
+ vars B B' B'' : Batch .
+ vars db db' db'' : DB .
+ var  BT : BatchTrans .
+ vars N N' V : Num .
+ var  FV : FunVar .
+ var  D : Dec .
+ var  NT : Nat .
+
+ sort BatchRes .
+ op |_,_| : Batch DB -> BatchRes [ctor] .
+
+ op _,_,_|-_ : Dec DB BatchTransList Batch -> BatchRes .
+ ceq D, db, BTL . BT |- B = | B'', db'' |
+  if | B', db' | := apply(D, db, BT, B) /\
+     | B'', db'' | := D, db', BTL |- B' .
+ eq D, db, BT |- B = apply(D, db, BT, B) .
+
+ op apply : Dec DB BatchTrans Batch -> BatchRes .
+ ceq apply(D, db, BT, mtBatch) = | mtBatch, db |
+  if BT =/= count .
+ ceq apply(D, db, BT, N B) = | B' B'', db'' |
+  if BT =/= count /\
+     | B', db'   | := applyN(D, db, BT, N) /\
+     | B'', db'' | := apply(D, db', BT, B) .
+ ceq apply(D, db, BT, << N, N' >> B) = | B' B'', db'' |
+  if BT =/= count /\
+     | B', db'   | := applyPair(D, db, BT, N, N') /\
+     | B'', db'' | := apply(D, db', BT, B) .
+ eq apply(D, db, count, B) = | nat2num(| B |), db | .
+
+ op applyN : Dec DB BatchTrans Num -> BatchRes .
+ ceq applyN(D, db, map(FV), N) = | V, db' |
+  if [V, db'] := D,mt,db |- FV(N) .
+ ceq applyN(D, db, filter(FV), N) = if V == z
+                                    then | mtBatch, db' |
+                                    else | N, db' |
+                                    fi
+  if [V, db'] := D,mt,db |- FV(N) .
+
+ op applyPair : Dec DB BatchTrans Num Num -> BatchRes .
+ ceq applyPair(D, db, map(FV), N, N') = | V, db' |
+  if [V, db'] := D,mt,db |- FV(N, N') .
+ ceq applyPair(D, db, filter(FV), N, N') = if V == z
+                                           then | mtBatch, db' |
+                                           else | N, db' |
+                                           fi
+  if [V, db'] := D,mt,db |- FV(N, N') .
+
+  op nat2num : Nat -> Num .
+  eq nat2num(0) = z .
+  eq nat2num(s(NT)) = s(nat2num(NT)) .
+
+endfm
+
+fmod DS is
+ pr SQL-SYNTAX .
+ pr BATCH .
+
+ sort DStream .
+ subsort Batch < DStream .
+
+ op mtDS : -> DStream [ctor] .
+ op _|_ : DStream DStream -> DStream [ctor assoc id: mtDS] .
+
+ sort World .
+
+ op _[in:_,out:_]_,_,_ : DStream Batch Batch Dec DB BatchTransList -> World [ctor] .
+
+ op _[in:_,out:_,time:_]_,_,_ : DStream Batch Batch Nat Dec DB BatchTransList -> World [ctor] .
+endfm
+
+mod DS-SEMANTICS is
+ pr BATCH-SEMANTICS .
+ pr DS .
+
+ var  BTL : BatchTransList .
+ vars IB OB B B' : Batch .
+ var  DS : DStream .
+ vars db db' : DB .
+ var  D : Dec .
+ var  N : Nat .
+
+ crl [process-batch] :
+     DS | B [in: IB, out: OB] D, db, BTL
+  => DS [in: B, out: B'] D, db', BTL
+  if | B', db' | := D, db, BTL |- B .
+
+ crl [process-batch-timed] :
+     DS | B [in: IB, out: OB, time: N] D, db, BTL
+  => DS [in: B, out: B', time: s(N)] D, db', BTL
+  if | B', db' | := D, db, BTL |- B .
+endm
+

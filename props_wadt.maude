@@ -1,0 +1,122 @@
+load model-checker.maude
+load ds.maude
+
+mod DS-TEST is
+ pr TEST-BATCH .
+ pr DS-SEMANTICS .
+
+ ops batch2 batch3 : -> Batch .
+ eq batch2 = s(z) s(z) s(z) s(s(s(s(s(z))))) .
+ eq batch3 = z z z s(s(s(z))) .
+
+ op btl : -> BatchTransList .
+ eq btl = map(FV('Mul2)) . map(FV('Add1)) .
+
+ op db : -> DB .
+
+ op world : -> World .
+ eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, db, btl .
+
+ op timedWorld : -> World .
+ eq timedWorld = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, db, btl .
+endm
+
+mod WADT-DS-TEST is
+ pr DS-SEMANTICS .
+
+ ops batch1 batch2 batch3 : -> Batch .
+ eq batch1 = s^5(z) s(z) s^7(z) s^2(z) s^5(z) s^6(z) .
+ eq batch2 = s(z) s^6(z) s(z) s^5(z) z s^5(z) s^8(z) .
+ eq batch3 = z z z s^3(z) .
+
+ op db : -> DB .
+
+ op myFuns : -> Dec .
+ eq myFuns =
+    FV('greaterThan4)(V('x)) <= V('x) - s^4(z) &
+    FV('moreThan3)(V('x)) <= If Equal(V('x), z) Or (Equal(V('x), s(z)) Or Equal(V('x), s^2(z)))
+                             Then z
+                             Else s(z) .
+
+ op btl : -> BatchTransList .
+ eq btl = map(FV('moreThan3)) . count . filter(FV('greaterThan4)) .
+
+ op world : -> World .
+ eq world = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch] myFuns, db, btl .
+
+ op timedWorld : -> World .
+ eq timedWorld = (batch3 | batch2 | batch1) [in: mtBatch, out: mtBatch, time: 0] myFuns, db, btl .
+endm
+
+rew timedWorld .
+
+red myFuns, btl |- batch1 .
+
+red batch1 .
+
+red myFuns, map(FV('Mul2)) . map(FV('Add1)) |- batch1 .
+
+mod PROPS is
+ pr DS-SEMANTICS .
+ pr SATISFACTION .
+
+ subsort World < State .
+
+ var  DS : DStream .
+ vars IB OB B B' : Batch .
+ var  BTL : BatchTransList .
+ var  D : Dec .
+ vars N N' : Num .
+ var  W : World .
+ vars Nt Nt' : Nat .
+
+ op earthquake : -> Prop [ctor] .
+ eq DS [in: IB, out: OB, time: Nt] D, BTL |= earthquake = numGreaterThan(IB, 5) >= 3 .
+ eq W |= earthquake = false [owise] .
+
+ *** Output is 1
+ op detected : -> Prop [ctor] .
+ eq DS [in: IB, out: s(z), time: Nt] D, BTL |= detected = true .
+ eq W |= detected = false [owise] .
+
+ op initialBatch4Window : Nat -> Prop [ctor] .
+ eq DS [in: IB, out: OB, time: Nt] D, BTL |= initialBatch4Window(Nt') = (Nt rem Nt') == 0 .
+
+ op numGreaterThan : Batch Nat -> Nat .
+ eq numGreaterThan(mtBatch, Nt) = 0 .
+ eq numGreaterThan(N B, Nt) = if greater(N, Nt)
+                              then 1
+                              else 0
+                              fi + numGreaterThan(B) .
+
+ op greaterThan : Num Nat -> Bool .
+ eq greater(s(N), 0) = true .
+ eq greater(s(N), s(Nt)) = greater(N, Nt) .
+ eq greater(N, Nt) = false [owise] .
+endm
+
+mod TEST is
+ pr PROPS .
+ pr MODEL-CHECKER .
+ pr LTL-SIMPLIFIER .
+ pr DS-TEST .
+
+ var N : Nat .
+
+ op atLeastTwice : NzNat -> Formula .
+ eq atLeastTwice(s(s(N))) = atLeastTwiceAux(N) .
+
+ op atLeastTwiceAux : Nat -> Formula .
+ eq atLeastTwiceAux(0) = (earthquake -> detected) /\ O (earthquake -> detected) .
+ eq atLeastTwiceAux(s(N)) = (putNext(s(N)) /\ putNext(s(s(N)))) \/ atLeastTwiceAux(N) .
+
+ op putNext : Nat -> Formula .
+ eq putNext(0) = earthquake -> detected .
+ eq putNext(s(N)) = O putNext(N) .
+endm
+
+red modelCheck(world, [] (earthquake -> detected)) .
+
+red atLeastTwice(3) .
+
+red modelCheck(timedWorld, [] (initialBatch4Window(3) -> atLeastTwice(3))) .

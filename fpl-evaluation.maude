@@ -1,0 +1,383 @@
+load sql.maude
+
+fmod SYNTAX is
+  pr SQL-SYNTAX .
+  pr ELEM .
+  pr QID .
+  pr INT .
+  pr VAR .
+
+  sorts Op Exp BVar Boolean BOp BExp FunVar VarList NumList ExpList Prog Dec .
+
+***  subsort Qid < Var .
+  op V : Qid -> Var .
+  subsort Var < Exp .
+  subsort Num < Exp .
+  subsort SQLCom < Exp .
+
+***  subsort Qid < BVar .
+  op BV : Qid -> BVar .
+  subsort BVar < BExp .
+  subsort Boolean < BExp .
+
+  op FV : Qid -> FunVar .
+
+  ops + - * : -> Op .
+
+  subsort Exp < ExpList .
+  op nilEL : -> ExpList [ctor] .
+  op _,_ : ExpList ExpList -> ExpList [ctor assoc prec 10] .
+
+  op ___ : Exp Op Exp -> Exp [ctor prec 20] .
+  op let_=_in_ : Var Exp Exp -> Exp [ctor prec 25] .
+  op If_Then_Else_ : BExp Exp Exp -> Exp [ctor prec 25] .
+  op _`(_`) : FunVar ExpList -> Exp [ctor prec 15] .
+
+  ops T F : -> Boolean [ctor] .
+  ops And Or : -> BOp [ctor] .
+  op ___ : BExp BOp BExp -> BExp [ctor prec 20] .
+  op Not_ : BExp -> BExp [ctor prec 15] .
+  op Equal : Exp Exp -> BExp [ctor] .
+
+  subsort Var < VarList .
+  op nilVL : -> VarList [ctor] .
+  op _,_ : VarList VarList -> VarList [ctor assoc prec 30] .
+  subsort VarList < ExpList .
+
+  subsort Num < NumList .
+  op nilNL : -> NumList [ctor] .
+  op _,_ : NumList NumList -> NumList [ctor assoc prec 30] .
+  subsort NumList < ExpList .
+
+  op <_,_> : Exp Dec -> Prog .
+  op nil : -> Dec [ctor] .
+  op _`(_`)<=_ : FunVar VarList Exp -> Dec [ctor prec 30] .
+  op _&_ : Dec Dec -> Dec [ctor assoc comm id: nil prec 40] .
+
+  op exDec1 : -> Dec .
+  eq exDec1 =
+    FV('Fac)(V('x)) <= If Equal(V('x),z) Then s(z)
+                       Else V('x) * FV('Fac)(V('x) - s(z)) &
+    FV('Rem)(V('x) , V('y)) <= If Equal(V('x),V('y)) Then z
+                             Else If Equal(V('y) - V('x), z) Then V('y)
+                                  Else FV('Rem)(V('x) , V('y) - V('x)) &
+    FV('Double)(V('x)) <= V('x) + V('x) .
+endfm
+
+fmod AP is
+  pr SQL-SYNTAX .
+  pr SYNTAX .
+
+  op Ap : Op Num Num -> Num .
+  op _+._ : Num Num -> Num .
+  op _*._ : Num Num -> Num .
+  op _-._ : Num Num -> Num .
+
+  vars n n' : Num .
+
+  eq Ap(+,n,n') = n +. n' .
+  eq Ap(*,n,n') = n *. n' .
+  eq Ap(-,n,n') = n -. n' .
+  eq z +. n = n .
+  eq s(n) +. n' = s(n +. n') .
+  eq z *. n = z .
+  eq s(n') *. n = (n' *. n) +. n .
+  eq z -. n = z .
+  eq s(n') -. z = s(n') .
+  eq s(n') -. s(n) = n' -. n .
+
+  op Ap : BOp Boolean Boolean -> Boolean .
+  op _and_ : Boolean Boolean -> Boolean .
+  op _or_ : Boolean Boolean -> Boolean .
+
+  var bv bv' : Boolean .
+
+  eq Ap(And,bv,bv') = bv and bv' .
+  eq Ap(Or,bv,bv') = bv or bv' .
+  eq T and bv = bv .
+  eq F and bv = F .
+  eq T or bv = T .
+  eq F or bv = bv .
+
+endfm
+
+fmod ENV is
+  inc SYNTAX .
+
+  sorts Value Variable .
+
+  subsorts Num Boolean < Value .
+  subsorts Var BVar < Variable .
+
+  sort ENV .
+
+  op mt : -> ENV .
+  op _=_ : Variable Value -> ENV [prec 20] .
+  op __ : ENV ENV -> ENV [assoc id: mt prec 30] .
+  op _`(_`) : ENV Var -> Num .
+  op _`(_`) : ENV BVar -> Boolean .
+  op _`[_/_`] : ENV Value Variable -> ENV [prec 35] .
+  op _`[_//_`] : ENV NumList VarList -> ENV [prec 35] .
+  op remove : ENV Variable -> ENV .
+
+  vars X X' : Variable .
+  var V : Value .
+  var ro : ENV .
+  var n : Num .
+  var x : Var .
+  var nl : NumList .
+  var xl : VarList .
+
+  eq remove(mt, X) = mt .
+  eq remove(X = V ro, X') = if X == X' then ro else X = V remove(ro,X') fi .
+  eq ro [V / X] = remove(ro,X) X = V .
+  eq ro [V // X] = ro [V / X] .
+  eq ro [(n, nl) // (x, xl)] = (ro[n / x]) [nl // xl] .
+  eq ro [nilNL // nilVL] = ro .
+  eq (X = V ro)(X') = if X == X' then V else ro(X') fi .
+
+endfm
+
+fmod SUBSTITUTION is
+  pr CONVERSION .
+  pr SYNTAX .
+
+  sort VarSet .
+
+  op mt : -> VarSet .
+  subsort Var < VarSet .
+  op _U_ : VarSet VarSet -> VarSet [assoc comm id: mt] .
+  eq x U x = x . *** idempotency
+
+  *** FVar returns the free Var (not BVar)
+  op FVar : Exp -> VarSet .
+  op FVarB : BExp -> VarSet .
+  op FVar* : ExpList -> VarSet .
+
+  op _in_ : Var VarSet -> Bool .
+  op _not-in_ : Var VarSet -> Bool .
+  op _\_ : VarSet VarSet -> VarSet .
+  op new : VarSet -> Var .
+  op new : VarSet Int -> Var .
+
+  var n : Num .
+  vars x y x' : Var .
+  vars e e' e1 e2 : Exp .
+  var op : Op .
+  var F : FunVar .
+  var bx : BVar .
+  vars be be1 be2 : BExp .
+  var bop : BOp .
+  var el : ExpList .
+  vars VS VS' : VarSet .
+  var N : Int .
+  var xl : VarList .
+  vars Q Q' : Qid .
+  vars S S' : String .
+
+  eq FVar(n) = mt .
+  eq FVar(x) = x .
+  eq FVar(e1 op e2) = FVar(e1) U FVar(e2) .
+  eq FVar(If be Then e1 Else e2) = FVarB(be) U FVar(e1) U FVar(e2) .
+  eq FVar(let x = e in e') = (FVar(e') \ x) U FVar(e) .
+  eq FVar(F(el)) = FVar*(el) .
+  eq FVar*(nilEL) = mt .
+  eq FVar*((e,el)) = FVar(e) U FVar*(el) .
+  eq FVarB(T) = mt .
+  eq FVarB(F) = mt .
+  eq FVarB(Not be) = FVarB(be) .
+  eq FVarB(be1 bop be2) = FVarB(be1) U FVarB(be2) .
+  eq FVarB(bx) = mt .
+  eq FVarB(Equal(e1,e2)) = FVar(e1) U FVar(e2) .
+
+  eq x in mt = false .
+  eq x in (y U VS) = (x == y) or (x in VS) .
+
+  eq x not-in VS = not (x in VS) .
+
+  eq (mt \ VS') = mt .
+  eq (y U VS) \ VS' = if (y in VS') then VS \ VS'
+                      else y U (VS \ VS') fi .
+
+
+  eq new(VS) = new(VS, 0) .
+  eq new(VS, N) = if V(index('z,N)) not-in VS then V(index('z,N))
+                  else new(VS, N + 1) fi .
+
+  op index : Qid Int -> Qid .
+  ceq index(Q, N) = qid(S + S')
+   if S := string(Q) /\
+      S' := string(N, 10) .
+
+  *** substitution of an expression for a variable, page 53
+
+  op _[_/e_] : Exp Exp Var -> Exp .
+  op _[_/b_] : BExp Exp Var -> BExp .
+  op _[_/l_] : ExpList Exp Var -> ExpList .
+
+  eq y [e' /e x] = if x == y then e' else y fi .
+
+  eq n [e' /e x] = n .
+
+  eq (e1 op e2) [e' /e x] = (e1 [e' /e x]) op (e2 [e' /e x]) .
+
+  eq (If be Then e1 Else e2) [e' /e x] =
+      If (be[e' /b x]) Then (e1[e' /e x]) Else (e2[e' /e x]) .
+
+  eq (let x = e1 in e2) [e' /e x] = let x = (e1 [e' /e x]) in e2 .
+
+  ceq (let y = e1 in e2) [e' /e x] =
+       let y = (e1 [e' /e x]) in (e2 [e' /e x])
+       if x =/= y /\ y not-in FVar(e') .
+
+  ceq (let y = e1 in e2) [e' /e x] =
+       let x' = (e1 [e' /e x]) in ((e2[x' /e y]) [e' /e x])
+       if x =/= y /\ y in FVar(e') /\
+          x' := new(FVar(e') U FVar(e2)) .
+
+  eq F(el) [e' /e x] = F(el [e' /l x]) .
+
+  eq nilEL [e' /l x] = nilEL .
+  eq (e, el) [e' /l x] =  (e[e' /e x]), (el[e' /l x]) .
+
+  eq T [e' /b x] = T .
+  eq F [e' /b x] = F .
+
+  eq bx [e' /b x] = bx .
+
+  eq (Not be) [e' /b x] = Not (be[e' /b x]) .
+
+  eq (be1 bop be2) [e' /b x] = (be1 [e' /b x]) bop (be2 [e' /b x]) .
+
+  eq Equal(e1,e2) [e' /b x] = Equal(e1[e' /e x],e2[e' /e x]) .
+
+
+  *** multiple simultaneous substitution
+
+  op _[_/_] : Exp ExpList VarList -> Exp .
+
+  *** simultaneous substitution is equivalent to a sequence of sequential
+  *** substitutions if the substituted variables do not occur in the
+  *** substituting expressions
+
+  eq e [e', el / x, xl] = (e [e' / x])[el / xl] .
+
+endfm
+
+
+
+fmod EVALUATION is
+  pr SQL-SEMANTICS .
+  pr SUBSTITUTION .
+  inc ENV .
+  inc AP .
+
+  sort Statement .
+  op [_,_] : Num DB -> Statement [ctor] .
+  op [_,_] : Boolean DB -> Statement [ctor] .
+  op [_,_] : NumList DB -> Statement [ctor] .
+  op _,_,_|-_ : Dec ENV DB Exp -> Statement [prec 40] .
+  op _,_,_|-_ : Dec ENV DB BExp -> Statement [prec 40] .
+  op _,_,_|-_ : Dec ENV DB ExpList -> Statement [prec 40] .
+
+  vars e e' e1 e2 : Exp .
+  vars x x' x1 x2 : Var .
+  vars v v' v1 v2 : Num .
+  vars bv bv' : Boolean .
+  vars db db' db'' : DB .
+  vars C C' : SQLCond .
+  var  sv : SQLValue .
+  vars bx bx' : BVar .
+  vars be be' : BExp .
+  var  el : ExpList .
+  var  xl : VarList .
+  var  vl : NumList .
+  vars D D' : Dec .
+  vars n n' : Num .
+  var  F : FunVar .
+  vars Q Q' : Qid .
+  var  bop : BOp .
+  var  ro : ENV .
+  var  op : Op .
+  var  R : Row .
+
+
+  *** Evaluation semantics for Fpl, page 71
+
+  eq [CR] : D,ro,db |- n = [n, db] .
+
+  eq [VarR] : D,ro,db |- x = [ro(x), db] .
+
+  ceq [IfR] : D,ro,db |- If be Then e Else e' = [v, db'']
+   if [T, db']  := D,ro,db  |- be /\
+      [v, db''] := D,ro,db' |- e .
+  ceq [IfR] : D,ro,db |- If be Then e Else e' = [v', db'']
+   if [F, db']   := D,ro,db  |- be /\
+      [v', db''] := D,ro,db' |- e' .
+
+  ceq [OpR] : D,ro,db |- e op e' = [Ap(op,v,v'), db'']
+   if [v, db']   := D,ro,db  |- e /\
+      [v', db''] := D,ro,db' |- e' .
+
+  ceq [LocR] : D,ro,db |- let x = e in e' = [v', db'']
+   if [v, db']   := D,ro,db         |- e /\
+      [v', db''] := D,ro[v / x],db' |- e' .
+
+  *** call-by-value
+  ceq [FunR] : D,ro,db |- F(el) = [v, db'']
+   if [vl, db']      := D,ro,db           |- el /\
+      F(xl)<= e & D' := D /\
+      [v, db'']      := D,ro[vl // xl],db' |- e .
+
+  ceq [ExpLR] : D,ro,db |- e, el = [v, vl, db'']
+   if [v, db']   := D,ro,db  |- e /\
+      [vl, db''] := D,ro,db' |- el .
+
+  *** call-by-name
+***  crl [FunR] : D,ro,db |- F(el) => v
+***            if F(xl)<= e & D' := D /\
+***               D,ro,db |- (e[el / xl]) => v .
+
+
+  *** Evaluation semantics for Boolean expressions, page 57
+
+  eq [CR] : D,ro,db |- T = [T, db] .
+  eq [CR] : D,ro,db |- F = [F, db] .
+
+  eq [VarR] : D,ro,db |- bx = [ro(bx), db] .
+
+  ceq [EqR] : D,ro,db |- Equal(e,e') = [T, db'']
+   if [v, db']  := D,ro,db  |- e  /\
+      [v, db''] := D,ro,db' |- e' .
+  ceq [EqR] : D,ro,db |- Equal(e,e') = [F, db'']
+   if [v, db']   := D,ro,db  |- e /\
+      [v', db''] := D,ro,db' |- e' /\
+      v =/= v' .
+
+  ceq [BOpR] : D,ro,db |- be bop be' = [Ap(bop,bv,bv'), db'']
+   if [bv, db']   := D,ro,db  |- be /\
+      [bv', db''] := D,ro,db' |- be' .
+
+  ceq [NotR] : D,ro,db |- Not be = [F, db']
+   if [T, db'] := D,ro,db |- be .
+  ceq [NotR] : D,ro,db |- Not be = [T, db']
+   if [F, db'] := D,ro,db |- be .
+
+  *** SQL statements
+  ceq [select] : D,ro,db |- (SELECT R FROM Q) = [v, db]
+   if v := singleValue(fst(eval(db, SELECT R FROM Q))) .
+  ceq [select-where] : D,ro,db |- (SELECT R FROM Q WHERE C) = [v, db]
+   if v := singleValue(fst(eval(db, SELECT R FROM Q WHERE C))) .
+  ceq [select-where] : D,ro,db |- (UPDATE Q SET C WHERE Q' =sql= sv) = [z, db'']
+   if [v, db'] := D,ro,db |- sv /\
+      db'' := snd(eval(db', UPDATE Q SET C WHERE Q' =sql= v)) .
+
+endfm
+
+eof
+
+red exDec1, mt |- FV('Fac)(s(s(s(s(z))))) .
+red exDec1, mt |- FV('Rem)(s(s(s(z))), s(s(s(s(s(z)))))) .
+
+red exDec1, mt |- FV('Double)(FV('Rem)(s(s(s(z))), s(s(s(s(s(z))))))) .
+
